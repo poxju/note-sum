@@ -16,6 +16,36 @@
             width: 100%;
             padding: 2rem;
         }
+        .header {
+            width: 100%;
+            max-width: 800px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 2rem;
+            padding: 1rem;
+            background-color: #2c2c2c;
+            border-radius: 10px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+        }
+        .welcome-text {
+            color: #00aaff;
+            font-size: 1.2rem;
+            font-weight: bold;
+        }
+        .logout-btn {
+            background-color: #dc3545;
+            color: white;
+            border: none;
+            padding: 0.5rem 1rem;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            transition: background-color 0.2s;
+        }
+        .logout-btn:hover {
+            background-color: #c82333;
+        }
         .admin-header {
             background: linear-gradient(135deg, #dc3545, #c82333);
             color: white;
@@ -238,6 +268,15 @@
 </head>
 <body>
     <div class="main-container">
+        <div class="header">
+            <div class="welcome-text">
+                Welcome Admin, <span th:text="${username ?: 'Administrator'}">Administrator</span>!
+            </div>
+            <form th:action="@{/logout}" method="post" style="margin: 0;">
+                <button type="submit" class="logout-btn">Logout</button>
+            </form>
+        </div>
+
         <div class="admin-header">
             <h1>Admin Dashboard</h1>
             <p>Welcome Administrator! You can view all users and their notes.</p>

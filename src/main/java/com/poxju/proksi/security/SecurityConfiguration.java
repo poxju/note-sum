@@ -51,6 +51,13 @@ public class SecurityConfiguration {
                 .loginPage("/login")
                 .successHandler(authenticationSuccessHandler())
                 .failureUrl("/login?error=true")
+            )
+            .logout(logout -> logout
+                .logoutUrl("/logout")
+                .logoutSuccessUrl("/login?logout=true")
+                .invalidateHttpSession(true)
+                .deleteCookies("jwtToken")
+                .clearAuthentication(true)
             );
 
         return http.build();

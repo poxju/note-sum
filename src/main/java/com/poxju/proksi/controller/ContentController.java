@@ -37,6 +37,7 @@ public class ContentController {
             System.out.println("Current user found: " + (currentUser != null ? currentUser.getEmail() + " - Role: " + currentUser.getRole() : "null"));
             
             if (currentUser != null) {
+                model.addAttribute("username", currentUser.getUsernameField()); 
                 if (currentUser.getRole() == Role.ADMIN) {
                     var allNotes = noteRepository.findAll();
                     var allUsers = userRepository.findAll();
