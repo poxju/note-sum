@@ -1,17 +1,31 @@
-CREATE TABLE users (
-    id BIGSERIAL PRIMARY KEY,
-    username VARCHAR(50) NOT NULL UNIQUE,
-    email VARCHAR(255) NOT NULL UNIQUE,
-    password VARCHAR(255) NOT NULL,
-    role VARCHAR(20) NOT NULL
-);
 
-CREATE TABLE notes (
-    id BIGSERIAL PRIMARY KEY,
-    user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    raw_text TEXT NOT NULL,
-    summary TEXT,
-    status VARCHAR(20) NOT NULL,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
+-- Fix constraints and add missing columns if needed
+
+-- Add title column to notes if it doesn't exist
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
+                  WHERE table_schema='public' AND table_name='notes' AND column_name='title') THEN
+        ALTER TABLE notes ADD COLUMN title VARCHAR(255) NOT NULL DEFAULT 'Untitled';
+    END IF;
+END $$;
+
+-- Rename raw_text to content if needed
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM information_schema.columns 
+              WHERE table_schema='public' AND table_name='notes' AND column_name='raw_text') THEN
+        ALTER TABLE notes RENAME COLUMN raw_text TO content;
+    END IF;
+END $$;
+
+-- Update role constraint to match current enum values
+DO $$
+BEGIN
+    -- Drop existing constraint if it exists
+    ALTER TABLE users DROP CONSTRAINT IF EXISTS users_role_check;
+    
+    -- Add new constraint
+    ALTER TABLE users ADD CONSTRAINT users_role_check 
+    CHECK (role IN ('ADMIN', 'AGENT'));
+END $$;

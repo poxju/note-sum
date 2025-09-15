@@ -1,0 +1,98 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:16-alpine
+    container_name: proksi-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: pdb
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-proksi123}
+      PGDATA: /var/lib/postgresql/data/pgdata
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init-db:/docker-entrypoint-initdb.d
+    ports:
+      - "5432:5432"
+    networks:
+      - proksi-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d pdb"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Spring Boot Application
+  proksi-app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: proksi-app
+    restart: unless-stopped
+    environment:
+      # Database Configuration
+      DB_URL: jdbc:postgresql://postgres:5432/pdb
+      DB_USER: postgres
+      DB_PW: ${DB_PASSWORD:-proksi123}
+      
+      # JWT Configuration
+      JWT_SECRET: ${JWT_SECRET:-mySecretKey123456789012345678901234567890}
+      JWT_EXPIRATION_MS: ${JWT_EXPIRATION_MS:-86400000}
+      
+      # HuggingFace Configuration
+      HUGGINGFACE_API_TOKEN: ${HUGGINGFACE_API_TOKEN:-}
+      
+      # Spring Profiles
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-production}
+      
+      # JVM Memory Settings
+      JAVA_OPTS: >-
+        -XX:+UseContainerSupport
+        -XX:MaxRAMPercentage=75.0
+        -XX:+UseG1GC
+        -XX:+UseStringDeduplication
+        -Djava.security.egd=file:/dev/./urandom
+        -Dspring.profiles.active=production
+    ports:
+      - "8080:8080"
+    networks:
+      - proksi-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/actuator/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  # Optional: Nginx Reverse Proxy
+  nginx:
+    image: nginx:alpine
+    container_name: proksi-nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/ssl:/etc/nginx/ssl:ro
+    networks:
+      - proksi-network
+    depends_on:
+      - proksi-app
+    profiles:
+      - nginx
+
+# Named volumes for data persistence
+volumes:
+  postgres_data:
+    driver: local
+
+# Network for inter-service communication
+networks:
+  proksi-network:
+    driver: bridge

@@ -67,6 +67,11 @@
 		<groupId>org.springframework.boot</groupId>
 		<artifactId>spring-boot-starter-thymeleaf</artifactId>
 		</dependency>
+		<!-- added Spring Boot Actuator for health checks and monitoring -->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-actuator</artifactId>
+		</dependency>
 		<!-- added Flyway for database migrations -->
 		<dependency>
     	<groupId>org.flywaydb</groupId>
