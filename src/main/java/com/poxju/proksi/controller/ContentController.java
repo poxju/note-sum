@@ -12,6 +12,7 @@ import com.poxju.proksi.api.request.RegisterRequest;
 import com.poxju.proksi.service.AuthenticationService;
 import com.poxju.proksi.service.AISummaryService;
 import com.poxju.proksi.model.Note;
+import com.poxju.proksi.model.Role;
 import com.poxju.proksi.model.User;
 import com.poxju.proksi.repository.NoteRepository;
 import com.poxju.proksi.repository.UserRepository;
@@ -33,12 +34,24 @@ public class ContentController {
         
         if (userDetails != null) {
             User currentUser = userRepository.findByEmail(userDetails.getUsername()).orElse(null);
-            System.out.println("Current user found: " + (currentUser != null ? currentUser.getEmail() : "null"));
+            System.out.println("Current user found: " + (currentUser != null ? currentUser.getEmail() + " - Role: " + currentUser.getRole() : "null"));
             
             if (currentUser != null) {
-                var notes = noteRepository.findByUserId(currentUser.getId());
-                System.out.println("Found " + notes.size() + " notes for user");
-                model.addAttribute("notes", notes);
+                if (currentUser.getRole() == Role.ADMIN) {
+                    var allNotes = noteRepository.findAll();
+                    var allUsers = userRepository.findAll();
+                    System.out.println("Admin user - Found " + allNotes.size() + " total notes");
+                    model.addAttribute("notes", allNotes);
+                    model.addAttribute("users", allUsers);
+                    model.addAttribute("isAdmin", true);
+                    return "admin-home";
+                } else {
+                    var notes = noteRepository.findByUserId(currentUser.getId());
+                    System.out.println("Regular user - Found " + notes.size() + " notes for user");
+                    model.addAttribute("notes", notes);
+                    model.addAttribute("isAdmin", false);
+                    return "home";
+                }
             }
         }
         return "home";
@@ -58,13 +71,12 @@ public class ContentController {
                 note.setTitle(title);
                 note.setContent(content);
                 note.setUser(currentUser);
-                note.setStatus("queued"); // AI özet işlemi için sıraya al
+                note.setStatus("queued"); 
                 
                 System.out.println("Saving note: " + note.getTitle());
                 Note savedNote = noteRepository.save(note);
                 System.out.println("Note saved with ID: " + savedNote.getId());
                 
-                // AI özet işlemini başlat (async)
                 aiSummaryService.generateSummaryAsync(savedNote.getId());
             }
         }
@@ -87,7 +99,6 @@ public class ContentController {
             redirectAttributes.addFlashAttribute("successMessage", "Registration successful! Please log in.");
             return "redirect:/login";
         } catch (Exception e) {
-            // Ideally, handle specific exceptions, e.g., user already exists
             redirectAttributes.addFlashAttribute("errorMessage", "Registration failed. Please try again.");
             return "redirect:/signup";
         }
