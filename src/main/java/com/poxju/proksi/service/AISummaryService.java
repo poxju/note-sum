@@ -13,54 +13,42 @@ import lombok.RequiredArgsConstructor;
 public class AISummaryService {
 
     private final NoteRepository noteRepository;
+    private final HuggingFaceService huggingFaceService;
 
     @Async
     public void generateSummaryAsync(Long noteId) {
         try {
             Note note = noteRepository.findById(noteId).orElse(null);
             if (note == null) {
+                System.err.println("Note not found: " + noteId);
                 return;
             }
 
             note.setStatus("processing");
             noteRepository.save(note);
+            System.out.println("Started AI processing for note: " + noteId);
 
-            String summary = simulateAISummary(note.getContent());
-
-            Thread.sleep(3000); // 3 saniye
-
+            String summary = huggingFaceService.summarizeText(note.getContent());
+            
             note.setSummary(summary);
             note.setStatus("done");
             noteRepository.save(note);
+            
+            System.out.println("AI processing completed for note: " + noteId);
 
         } catch (Exception e) {
-            Note note = noteRepository.findById(noteId).orElse(null);
-            if (note != null) {
-                note.setStatus("failed");
-                noteRepository.save(note);
+            System.err.println("Error processing summary for note " + noteId + ": " + e.getMessage());
+            
+            try {
+                Note note = noteRepository.findById(noteId).orElse(null);
+                if (note != null) {
+                    note.setStatus("failed");
+                    note.setSummary("Summary generation failed: " + e.getMessage());
+                    noteRepository.save(note);
+                }
+            } catch (Exception ex) {
+                System.err.println("Error updating failed status: " + ex.getMessage());
             }
-            e.printStackTrace();
         }
-    }
-
-    private String simulateAISummary(String content) {
-        if (content.length() < 50) {
-            return "Short note: " + content.substring(0, Math.min(content.length(), 30)) + "...";
-        } else if (content.length() < 200) {
-            return "Medium-length note covering key points from the original content. " +
-                   "Main topic appears to be about: " + extractKeywords(content);
-        } else {
-            return "Comprehensive note with detailed information. " +
-                   "Key themes include: " + extractKeywords(content) + 
-                   ". This summary captures the essential points from a longer text.";
-        }
-    }
-
-    private String extractKeywords(String content) {
-        String[] words = content.toLowerCase().split("\\s+");
-        if (words.length > 0) {
-            return words[0] + (words.length > 1 ? ", " + words[1] : "");
-        }
-        return "general topics";
     }
 }
