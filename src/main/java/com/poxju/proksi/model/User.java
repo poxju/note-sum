@@ -55,8 +55,10 @@ public class User implements UserDetails {
     public Long getId() { return id; }
     public void setId(Long id) { this.id = id; }
 
-    public String getUsername() { return username; }
+    public String getUsername() { return email; } // return email because I store email in JWT token
     public void setUsername(String username) { this.username = username; }
+    
+    public String getUsernameField() { return username; }
 
     public String getEmail() { return email; }
     public void setEmail(String email) { this.email = email; }
