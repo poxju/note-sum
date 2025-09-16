@@ -48,7 +48,7 @@ ENV JAVA_OPTS="-XX:+UseContainerSupport \
                -XX:+UseG1GC \
                -XX:+UseStringDeduplication \
                -Djava.security.egd=file:/dev/./urandom \
-               -Dspring.profiles.active=development"
+               -Dspring.profiles.active=production"
 
 # Run application
 ENTRYPOINT ["sh", "-c", "java $JAVA_OPTS -jar app.jar"]
