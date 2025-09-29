@@ -5,8 +5,10 @@ body {
     display: flex;
     justify-content: center;
     align-items: center;
-    height: 100vh;
+    min-height: 100vh;
     margin: 0;
+    padding: 1rem;
+    box-sizing: border-box;
 }
 .container {
     background-color: #2c2c2c;
@@ -14,8 +16,9 @@ body {
     border-radius: 10px;
     box-shadow: 0 8px 16px rgba(0, 0, 0, 0.3);
     width: 100%;
-    max-width: 360px;
+    max-width: 400px;
     text-align: center;
+    box-sizing: border-box;
 }
 h2 {
     margin-bottom: 2rem;
@@ -54,6 +57,7 @@ input[type="email"]:focus {
     display: flex;
     gap: 1rem;
     margin-top: 2rem;
+    flex-wrap: wrap;
 }
 button {
     flex: 1;
@@ -64,6 +68,8 @@ button {
     font-weight: 600;
     cursor: pointer;
     transition: background-color 0.3s, transform 0.2s;
+    min-width: 120px;
+    box-sizing: border-box;
 }
 button[type="submit"] {
     background-color: #007bff;
@@ -96,4 +102,88 @@ button[type="button"]:hover {
     padding: 0.75rem;
     border-radius: 5px;
     margin-bottom: 1.5rem;
+}
+
+/* Responsive Design */
+/* Extra small devices (phones, 600px and down) */
+@media only screen and (max-width: 600px) {
+    body {
+        padding: 0.5rem;
+    }
+    
+    .container {
+        padding: 1.5rem;
+        max-width: 100%;
+        margin: 0;
+    }
+    
+    h2 {
+        font-size: 1.5rem;
+        margin-bottom: 1.5rem;
+    }
+    
+    .form-group {
+        margin-bottom: 1.25rem;
+    }
+    
+    input[type="text"],
+    input[type="password"],
+    input[type="email"] {
+        padding: 0.875rem;
+        font-size: 16px; /* Prevents zoom on iOS */
+    }
+    
+    .button-group {
+        flex-direction: column;
+        gap: 0.75rem;
+        margin-top: 1.5rem;
+    }
+    
+    button {
+        width: 100%;
+        padding: 0.875rem;
+        font-size: 1rem;
+        min-width: unset;
+    }
+    
+    .error-message,
+    .success-message {
+        padding: 0.625rem;
+        font-size: 0.875rem;
+    }
+}
+
+/* Small devices (portrait tablets and large phones, 600px to 768px) */
+@media only screen and (min-width: 600px) and (max-width: 768px) {
+    .container {
+        max-width: 500px;
+        padding: 2rem;
+    }
+    
+    input[type="text"],
+    input[type="password"],
+    input[type="email"] {
+        font-size: 16px; /* Prevents zoom on iOS */
+    }
+}
+
+/* Medium devices (landscape tablets, 768px to 992px) */
+@media only screen and (min-width: 768px) and (max-width: 992px) {
+    .container {
+        max-width: 600px;
+    }
+}
+
+/* Landscape orientation adjustments */
+@media only screen and (max-height: 500px) and (orientation: landscape) {
+    body {
+        height: auto;
+        min-height: 100vh;
+        align-items: flex-start;
+        padding: 1rem 0;
+    }
+    
+    .container {
+        margin: 1rem auto;
+    }
 }
