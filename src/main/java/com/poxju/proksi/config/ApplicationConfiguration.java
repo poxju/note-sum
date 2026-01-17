@@ -14,17 +14,20 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import com.poxju.proksi.repository.UserRepository;
 
 import lombok.RequiredArgsConstructor;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 @Configuration
 @RequiredArgsConstructor
 public class ApplicationConfiguration {
 
+    private static final Logger logger = LoggerFactory.getLogger(ApplicationConfiguration.class);
     private final UserRepository repository;
 
     @Bean
     public UserDetailsService userDetailsService() {
         return username -> {
-            System.out.println("Trying to load user: " + username);
+            logger.debug("Loading user: {}", username);
             return repository.findByEmail(username)
                 .orElseThrow(() -> new UsernameNotFoundException("User not found ::: IN APPCONFIG"));
         };

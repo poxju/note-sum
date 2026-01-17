@@ -3,10 +3,14 @@ package com.poxju.proksi.controller;
 import org.springframework.stereotype.Controller;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 import org.springframework.ui.Model;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 
 import com.poxju.proksi.api.request.RegisterRequest;
 import com.poxju.proksi.service.AuthenticationService;
@@ -18,10 +22,14 @@ import com.poxju.proksi.repository.NoteRepository;
 import com.poxju.proksi.repository.UserRepository;
 
 import lombok.RequiredArgsConstructor;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 @Controller
 @RequiredArgsConstructor
 public class ContentController {
+
+    private static final Logger logger = LoggerFactory.getLogger(ContentController.class);
 
     private final AuthenticationService authenticationService;
     private final AISummaryService aiSummaryService;
@@ -29,27 +37,37 @@ public class ContentController {
     private final UserRepository userRepository;
 
     @GetMapping("/")
-    public String home(Model model, @AuthenticationPrincipal UserDetails userDetails) {
-        System.out.println("Home page accessed by: " + (userDetails != null ? userDetails.getUsername() : "anonymous"));
+    public String home(
+            Model model, 
+            @AuthenticationPrincipal UserDetails userDetails,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
         
         if (userDetails != null) {
             User currentUser = userRepository.findByEmail(userDetails.getUsername()).orElse(null);
-            System.out.println("Current user found: " + (currentUser != null ? currentUser.getEmail() + " - Role: " + currentUser.getRole() : "null"));
             
             if (currentUser != null) {
                 model.addAttribute("username", currentUser.getUsernameField()); 
+                Pageable pageable = PageRequest.of(page, size);
+                
                 if (currentUser.getRole() == Role.ADMIN) {
-                    var allNotes = noteRepository.findAll();
-                    var allUsers = userRepository.findAll();
-                    System.out.println("Admin user - Found " + allNotes.size() + " total notes");
-                    model.addAttribute("notes", allNotes);
-                    model.addAttribute("users", allUsers);
+                    Page<Note> notesPage = noteRepository.findAll(pageable);
+                    Page<User> usersPage = userRepository.findAll(pageable);
+                    
+                    model.addAttribute("notes", notesPage.getContent());
+                    model.addAttribute("users", usersPage.getContent());
+                    model.addAttribute("currentPage", page);
+                    model.addAttribute("totalPages", notesPage.getTotalPages());
+                    model.addAttribute("totalNotes", notesPage.getTotalElements());
                     model.addAttribute("isAdmin", true);
                     return "admin-home";
                 } else {
-                    var notes = noteRepository.findByUserId(currentUser.getId());
-                    System.out.println("Regular user - Found " + notes.size() + " notes for user");
-                    model.addAttribute("notes", notes);
+                    Page<Note> notesPage = noteRepository.findByUserId(currentUser.getId(), pageable);
+                    
+                    model.addAttribute("notes", notesPage.getContent());
+                    model.addAttribute("currentPage", page);
+                    model.addAttribute("totalPages", notesPage.getTotalPages());
+                    model.addAttribute("totalNotes", notesPage.getTotalElements());
                     model.addAttribute("isAdmin", false);
                     return "home";
                 }
@@ -60,12 +78,10 @@ public class ContentController {
 
     @PostMapping("/notes")
     public String createNote(String title, String content, @AuthenticationPrincipal UserDetails userDetails) {
-        System.out.println("createNote called with title: " + title + ", content: " + content);
-        System.out.println("UserDetails: " + (userDetails != null ? userDetails.getUsername() : "null"));
+        logger.debug("createNote called with title: {}", title);
         
         if (userDetails != null) {
             User currentUser = userRepository.findByEmail(userDetails.getUsername()).orElse(null);
-            System.out.println("Current user found: " + (currentUser != null ? currentUser.getEmail() : "null"));
             
             if (currentUser != null) {
                 Note note = new Note();
@@ -74,11 +90,15 @@ public class ContentController {
                 note.setUser(currentUser);
                 note.setStatus("queued"); 
                 
-                System.out.println("Saving note: " + note.getTitle());
                 Note savedNote = noteRepository.save(note);
-                System.out.println("Note saved with ID: " + savedNote.getId());
+                logger.info("Note saved with ID: {} by user: {}", savedNote.getId(), currentUser.getEmail());
                 
-                aiSummaryService.generateSummaryAsync(savedNote.getId());
+                // Fire and forget async processing - don't wait for completion
+                aiSummaryService.generateSummaryAsync(savedNote.getId())
+                    .exceptionally(ex -> {
+                        logger.error("Async summary generation failed for note {}", savedNote.getId(), ex);
+                        return null;
+                    });
             }
         }
         return "redirect:/";

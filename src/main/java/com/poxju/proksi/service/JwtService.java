@@ -22,15 +22,18 @@ import io.jsonwebtoken.security.Keys;
 @Service
 public class JwtService {
 
-    @Value("${JWT_SECRET}")
-    private String secretKey;
+    private final String secretKey;
+    private final long expirationMs;
     
-    public JwtService(@Value("${JWT_SECRET}") String secretKey) {
+    // Cache the signing key to avoid repeated decoding
+    private Key cachedSigningKey;
+    
+    public JwtService(
+            @Value("${JWT_SECRET}") String secretKey,
+            @Value("${JWT_EXPIRATION_MS:86400000}") long expirationMs) {
         this.secretKey = secretKey;
+        this.expirationMs = expirationMs; // Default: 24 hours (86400000 ms)
     }
-
-    @Value("${JWT_EXPIRATION_MS}")
-    private long expirationMs; // 24 hours for example
 
     public String extractUsername(String token){
         return extractClaim(token, Claims::getSubject);
@@ -93,8 +96,16 @@ public class JwtService {
     }
 
     private Key getSignInKey() {
-        byte[] keyBytes = Decoders.BASE64.decode(secretKey); // Base64 decode
-        return Keys.hmacShaKeyFor(keyBytes);
+        // Cache the key to avoid repeated decoding on every request
+        if (cachedSigningKey == null) {
+            synchronized (this) {
+                if (cachedSigningKey == null) {
+                    byte[] keyBytes = Decoders.BASE64.decode(secretKey); // Base64 decode
+                    cachedSigningKey = Keys.hmacShaKeyFor(keyBytes);
+                }
+            }
+        }
+        return cachedSigningKey;
     }
 
 }

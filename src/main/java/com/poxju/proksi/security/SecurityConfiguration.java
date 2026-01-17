@@ -38,7 +38,11 @@ public class SecurityConfiguration {
                     "/login",
                     "/signup",
                     "/css/**",
-                    "/js/**")
+                    "/js/**",
+                    "/actuator/health",
+                    "/actuator/health/**",
+                    "/health",
+                    "/ping")
                 .permitAll()
                 .anyRequest()
                 .authenticated()

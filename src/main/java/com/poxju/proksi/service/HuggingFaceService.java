@@ -5,6 +5,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import okhttp3.*;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -13,26 +15,32 @@ import java.util.concurrent.TimeUnit;
 @Service
 public class HuggingFaceService {
 
-    private final OkHttpClient client;
+    private static final Logger logger = LoggerFactory.getLogger(HuggingFaceService.class);
+    private static final OkHttpClient SHARED_CLIENT;
     private final ObjectMapper objectMapper;
     private final String apiToken;
     
     private static final String HF_API_URL = "https://api-inference.huggingface.co/models/facebook/bart-large-cnn";
     
-    public HuggingFaceService(@Value("${huggingface.api.token:}") String apiToken) {
-        this.apiToken = apiToken;
-        this.client = new OkHttpClient.Builder()
+    static {
+        // Shared OkHttpClient with connection pooling for better resource usage
+        SHARED_CLIENT = new OkHttpClient.Builder()
                 .connectTimeout(30, TimeUnit.SECONDS)
                 .readTimeout(60, TimeUnit.SECONDS)
                 .writeTimeout(30, TimeUnit.SECONDS)
+                .connectionPool(new okhttp3.ConnectionPool(5, 5, TimeUnit.MINUTES))
                 .build();
+    }
+    
+    public HuggingFaceService(@Value("${huggingface.api.token:}") String apiToken) {
+        this.apiToken = apiToken;
         this.objectMapper = new ObjectMapper();
     }
     
     public String summarizeText(String text) {
         try {
             if (apiToken == null || apiToken.isEmpty() || apiToken.equals("${HUGGINGFACE_API_TOKEN}")) {
-                System.out.println("HuggingFace API token not configured, using fallback");
+                logger.debug("HuggingFace API token not configured, using fallback");
                 return generateFallbackSummary(text);
             }
             
@@ -48,7 +56,7 @@ public class HuggingFaceService {
             requestBody.put("parameters", parameters);
             
             String requestBodyJson = objectMapper.writeValueAsString(requestBody);
-            System.out.println("Sending to HuggingFace: " + requestBodyJson);
+            logger.debug("Sending request to HuggingFace API");
             
             RequestBody body = RequestBody.create(
                 requestBodyJson, 
@@ -62,22 +70,33 @@ public class HuggingFaceService {
                     .addHeader("Authorization", "Bearer " + apiToken)
                     .build();
             
-            try (Response response = client.newCall(request).execute()) {
-                String responseBody = response.body().string();
-                System.out.println("HuggingFace Response Code: " + response.code());
-                System.out.println("HuggingFace Response: " + responseBody);
+            try (Response response = SHARED_CLIENT.newCall(request).execute()) {
+                logger.debug("HuggingFace API response code: {}", response.code());
                 
-                if (!response.isSuccessful()) {
-                    System.err.println("HuggingFace API Error: " + response.code() + " - " + response.message());
+                ResponseBody responseBody = response.body();
+                if (responseBody == null) {
+                    logger.warn("HuggingFace API returned null response body");
                     return generateFallbackSummary(text);
                 }
                 
-                return parseSummaryResponse(responseBody, text);
+                if (!response.isSuccessful()) {
+                    logger.warn("HuggingFace API error: {} - {}", response.code(), response.message());
+                    // Consume the error response body to allow connection reuse
+                    try {
+                        responseBody.string();
+                    } catch (Exception ignored) {
+                        // Ignore errors when consuming error response
+                    }
+                    return generateFallbackSummary(text);
+                }
+                
+                // Read response body - for API responses this should be reasonable size
+                String responseBodyString = responseBody.string();
+                return parseSummaryResponse(responseBodyString, text);
             }
             
         } catch (Exception e) {
-            System.err.println("Error calling HuggingFace API: " + e.getMessage());
-            e.printStackTrace();
+            logger.error("Error calling HuggingFace API", e);
             return generateFallbackSummary(text);
         }
     }
@@ -88,7 +107,7 @@ public class HuggingFaceService {
             
             if (jsonNode.has("error")) {
                 String errorMsg = jsonNode.get("error").asText();
-                System.err.println("HuggingFace API Error: " + errorMsg);
+                logger.warn("HuggingFace API error: {}", errorMsg);
                 
                 if (errorMsg.contains("currently loading")) {
                     return "Model is loading, please try again in a few seconds. Meanwhile: " + 
@@ -102,7 +121,7 @@ public class HuggingFaceService {
                 if (firstResult.has("summary_text")) {
                     String summary = firstResult.get("summary_text").asText();
                     if (summary.equals(originalText.trim())) {
-                        System.out.println("Summary equals original text, using fallback");
+                        logger.debug("Summary equals original text, using fallback");
                         return generateFallbackSummary(originalText);
                     }
                     return summary;
@@ -112,17 +131,17 @@ public class HuggingFaceService {
             if (jsonNode.has("summary_text")) {
                 String summary = jsonNode.get("summary_text").asText();
                 if (summary.equals(originalText.trim())) {
-                    System.out.println("Summary equals original text, using fallback");
+                    logger.debug("Summary equals original text, using fallback");
                     return generateFallbackSummary(originalText);
                 }
                 return summary;
             }
             
-            System.err.println("Unexpected response format: " + responseBody);
+            logger.warn("Unexpected response format from HuggingFace API");
             return generateFallbackSummary(originalText);
             
         } catch (Exception e) {
-            System.err.println("Error parsing HuggingFace response: " + e.getMessage());
+            logger.error("Error parsing HuggingFace response", e);
             return generateFallbackSummary(originalText);
         }
     }
@@ -186,25 +205,41 @@ public class HuggingFaceService {
     
     private String extractKeywords(String text) {
         try {
+            // Early return for very short texts
+            if (text == null || text.length() < 10) {
+                return "";
+            }
+            
             String[] words = text.toLowerCase()
                     .replaceAll("[^a-zA-Z0-9\\s]", "")
                     .split("\\s+");
             
-            Map<String, Integer> wordCount = new HashMap<>();
+            // Estimate initial capacity to reduce HashMap resizing
+            int estimatedSize = Math.min(words.length / 2, 50);
+            Map<String, Integer> wordCount = new HashMap<>(estimatedSize);
+            
+            // Single pass through words array - O(n) complexity
             for (String word : words) {
-                if (word.length() > 3) { 
-                    wordCount.put(word, wordCount.getOrDefault(word, 0) + 1);
+                if (word != null && word.length() > 3) { 
+                    wordCount.merge(word, 1, Integer::sum);
                 }
             }
             
+            // Early return if no keywords found
+            if (wordCount.isEmpty()) {
+                return "";
+            }
+            
+            // Stream processing - limit to top 3 keywords
             return wordCount.entrySet().stream()
-                    .sorted((e1, e2) -> e2.getValue().compareTo(e1.getValue()))
+                    .sorted((e1, e2) -> Integer.compare(e2.getValue(), e1.getValue()))
                     .limit(3)
                     .map(Map.Entry::getKey)
                     .reduce((a, b) -> a + ", " + b)
                     .orElse("");
                     
         } catch (Exception e) {
+            logger.debug("Error extracting keywords", e);
             return "";
         }
     }
